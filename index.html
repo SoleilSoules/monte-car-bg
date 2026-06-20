@@ -116,6 +116,13 @@
         <div class="hint">строка = машина · перетащи сюда .txt/.csv или <a href="#" id="pickFile" style="color:var(--acc)">выбери файл</a></div>
         <input type="file" id="fileInput" accept=".txt,.csv,text/plain,text/csv" style="display:none">
       </div>
+      <div class="field">
+        <label class="lbl" for="ratio">Соотношение</label>
+        <select id="ratio">
+          <option value="16:9" selected>16:9 — 1792×1008 (hero)</option>
+          <option value="21:9">21:9 — 1792×768 (ультраширокий)</option>
+        </select>
+      </div>
       <button class="btn" id="go">Сгенерировать</button>
       <div class="cost" id="cost"></div>
     </div>
@@ -138,7 +145,9 @@
 <script>
 const $ = s => document.querySelector(s);
 const KEY_LS = 'monte_openai_key';
-const PRICE_HIGH = 0.21;   // ориентир за 1536x1024 high, gpt-image-2
+const PRICE_HIGH = 0.23;   // ориентир high, gpt-image-2 (16:9)
+const SIZES = {'16:9':'1792x1008','21:9':'1792x768'};
+const RATIOS = {'16:9':'16/9','21:9':'21/9'};
 const GEN = [];            // {b64, car} для «скачать все»
 
 // ---- стиль фото, выученный из референсов Monte (постоянная часть промпта) ----
@@ -215,15 +224,15 @@ function slug(s){return (s.toLowerCase().replace(/[^a-z0-9]+/g,'-').replace(/^-|
 function downloadB64(b64,name){ const a=document.createElement('a'); a.href='data:image/png;base64,'+b64; a.download=name+'.png'; a.click(); }
 const sleep=ms=>new Promise(r=>setTimeout(r,ms));
 
-function loadingCard(car){
+function loadingCard(car, cssRatio){
   const w=document.createElement('div'); w.className='shot';
-  w.innerHTML=`<div class="shotimg shotload"><div class="spin"></div><div class="mono" style="font-size:11px">${escapeHtml(car)}</div><div class="timer mono">0s</div></div>`;
+  w.innerHTML=`<div class="shotimg shotload" style="aspect-ratio:${cssRatio}"><div class="spin"></div><div class="mono" style="font-size:11px">${escapeHtml(car)}</div><div class="timer mono">0s</div></div>`;
   return w;
 }
-function fillCard(w, b64, scene, car){
+function fillCard(w, b64, scene, car, cssRatio){
   const url='data:image/png;base64,'+b64;
   w.innerHTML=`
-    <div class="shotimg"><img src="${url}" alt=""></div>
+    <div class="shotimg" style="aspect-ratio:${cssRatio}"><img src="${url}" alt=""></div>
     <div class="shotmeta">
       <div style="min-width:0"><div class="name">${escapeHtml(car)}</div><div class="scene">${escapeHtml(scene)}</div></div>
       <button class="btn ghost sm dl">Скачать</button>
@@ -250,7 +259,7 @@ $('#go').onclick=async()=>{
   if(!cars.length){ log.innerHTML='<span class="e">✗ Добавь хотя бы одну машину.</span>'; return; }
   if($('#key').value.trim()){ localStorage.setItem(KEY_LS,key); setKeyStatus(true); }
 
-  const size='1536x1024';
+  const ratio=$('#ratio').value, size=SIZES[ratio], cssRatio=RATIOS[ratio];
 
   go.disabled=true; GEN.length=0;
   $('#placeholder').style.display='none';
@@ -261,13 +270,13 @@ $('#go').onclick=async()=>{
   for(let i=0;i<cars.length;i++){
     const car=cars[i];
     log.innerHTML=`<span class="spin"></span> <span class="step">${i+1} из ${cars.length}:</span> ${escapeHtml(car)}…`;
-    const wcard=loadingCard(car); results.appendChild(wcard);
+    const wcard=loadingCard(car, cssRatio); results.appendChild(wcard);
     const stop=startTimer(wcard.querySelector('.timer'));
     try{
       const b=await brain(car,key);
       const scene=b.environment;
       const b64=await draw(STYLE(car,scene), size, key);
-      fillCard(wcard, b64, scene, car);
+      fillCard(wcard, b64, scene, car, cssRatio);
       GEN.push({b64,car}); done++;
     }catch(err){
       errCard(wcard, car, err.message); fail++;
