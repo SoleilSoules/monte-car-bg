@@ -1,0 +1,284 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Monte · Car Background Generator</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --bg:#0A0A0A; --panel:rgba(255,255,255,.04); --line:rgba(255,255,255,.10);
+    --txt:#fff; --mut:rgba(255,255,255,.55); --mut2:rgba(255,255,255,.35);
+    --acc:#C73E1D; --acc-h:#a83217; --ok:#5BBF6A; --err:#E5544B;
+    --mono:"IBM Plex Mono",ui-monospace,monospace; --sans:"Inter",system-ui,sans-serif;
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{background:var(--bg);color:var(--txt);font-family:var(--sans);-webkit-font-smoothing:antialiased;line-height:1.5;padding:28px 24px 60px}
+  .wrap{max-width:1180px;margin:0 auto}
+  .mono{font-family:var(--mono)}
+  .lbl{font-family:var(--mono);font-size:11px;letter-spacing:.12em;text-transform:uppercase;color:var(--mut)}
+
+  header{display:flex;align-items:baseline;gap:14px;margin-bottom:8px}
+  .logo{font-size:22px;font-weight:300;letter-spacing:-.01em}
+  .logo b{font-weight:700}
+  .tag{font-family:var(--mono);font-size:11px;letter-spacing:.18em;text-transform:uppercase;color:var(--acc)}
+  .sub{color:var(--mut);font-size:13.5px;max-width:680px;margin-bottom:26px}
+
+  .keybar{display:flex;flex-wrap:wrap;gap:10px;align-items:center;background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:14px 16px;margin-bottom:14px}
+  .keybar .lbl{flex:0 0 auto;margin-right:4px}
+  input,select,textarea{background:#000;border:1px solid var(--line);color:var(--txt);font-family:var(--mono);font-size:13px;border-radius:9px;padding:11px 13px;outline:none;transition:border-color .15s}
+  input:focus,select:focus,textarea:focus{border-color:var(--acc)}
+  input::placeholder,textarea::placeholder{color:var(--mut2)}
+  textarea{width:100%;resize:vertical;min-height:130px;line-height:1.7}
+  textarea.drag{border-color:var(--acc);background:rgba(199,62,29,.08)}
+  #key{flex:1 1 360px;min-width:220px}
+  .keystatus{font-family:var(--mono);font-size:11.5px;color:var(--mut2)}
+  .keystatus.on{color:var(--ok)}
+  .disc{font-family:var(--mono);font-size:10.5px;color:var(--mut2);flex-basis:100%;line-height:1.55}
+
+  .grid{display:grid;grid-template-columns:340px 1fr;gap:14px;align-items:start}
+  .card{background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:18px}
+  .field{margin-bottom:16px}
+  .field:last-child{margin-bottom:0}
+  .field label{display:block;margin-bottom:7px}
+  .field input,.field select{width:100%}
+  .hint{font-family:var(--mono);font-size:10.5px;color:var(--mut2);margin-top:6px}
+
+  .btn{display:inline-flex;align-items:center;justify-content:center;gap:9px;width:100%;background:var(--acc);color:#fff;font-family:var(--mono);font-size:13px;font-weight:600;letter-spacing:.08em;text-transform:uppercase;border:0;border-radius:40px;padding:15px;cursor:pointer;transition:background .15s}
+  .btn:hover{background:var(--acc-h)}
+  .btn:disabled{opacity:.5;cursor:not-allowed}
+  .btn.ghost{background:rgba(255,255,255,.08);color:#fff}
+  .btn.ghost:hover{background:rgba(255,255,255,.14)}
+  .btn.sm{width:auto;padding:10px 16px;font-size:11px}
+  .cost{text-align:center;font-family:var(--mono);font-size:11px;color:var(--mut);margin-top:10px}
+  .cost b{color:var(--txt)}
+
+  .out{min-height:340px}
+  .placeholder{height:100%;min-height:340px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:10px;color:var(--mut2);text-align:center}
+  .placeholder svg{opacity:.4}
+  .log{font-family:var(--mono);font-size:12px;color:var(--mut);white-space:pre-wrap;margin-bottom:14px;min-height:18px}
+  .log .step{color:var(--txt)}
+  .log .e{color:var(--err)}
+  .results{display:grid;grid-template-columns:1fr 1fr;gap:18px}
+  @media(max-width:560px){.results{grid-template-columns:1fr}}
+  .shot{border:1px solid var(--line);border-radius:12px;overflow:hidden;background:#000}
+  .shot.err{border-color:rgba(229,84,75,.5)}
+  .shotimg{position:relative;aspect-ratio:3/2;background:#111;display:flex;align-items:center;justify-content:center}
+  .shotimg img{width:100%;height:100%;object-fit:cover;display:block}
+  .shotimg.preview::after{content:"";position:absolute;inset:0;background:linear-gradient(90deg,rgba(8,8,9,.96) 0%,rgba(8,8,9,.8) 30%,rgba(8,8,9,.25) 60%,transparent 100%)}
+  .shotimg.preview .demo{position:absolute;left:7%;top:50%;transform:translateY(-50%);z-index:2;max-width:60%}
+  .shotimg .demo{display:none}
+  .shotimg.preview .demo{display:block}
+  .demo .dh{font-size:clamp(18px,2.4vw,30px);font-weight:800;line-height:1.04;letter-spacing:-.02em}
+  .demo .dp{font-family:var(--mono);font-size:9.5px;letter-spacing:.1em;text-transform:uppercase;color:var(--acc);margin-bottom:7px}
+  .shotload{flex-direction:column;gap:10px;color:var(--mut)}
+  .timer{font-size:13px;color:var(--mut);font-weight:500}
+  .shotmeta{padding:12px 14px;border-top:1px solid var(--line);display:flex;align-items:center;justify-content:space-between;gap:10px}
+  .shotmeta .name{font-family:var(--mono);font-size:11.5px;color:var(--txt);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .shotmeta .scene{font-family:var(--mono);font-size:10px;color:var(--mut2);margin-top:3px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .shotmeta .errtxt{font-family:var(--mono);font-size:11px;color:var(--err)}
+  .toolbar{display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-bottom:14px}
+  .toolbar .check{margin-left:auto}
+  .check{display:flex;align-items:center;gap:9px;cursor:pointer;user-select:none}
+  .check input{width:16px;height:16px;accent-color:var(--acc);flex:0 0 auto}
+  .spin{width:15px;height:15px;border:2px solid rgba(255,255,255,.25);border-top-color:#fff;border-radius:50%;animation:sp .7s linear infinite}
+  @keyframes sp{to{transform:rotate(360deg)}}
+
+  @media(max-width:820px){.grid{grid-template-columns:1fr}}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <div class="logo">monte <b>tuning</b></div>
+    <div class="tag">car background generator</div>
+  </header>
+  <p class="sub">Вставь список машин — инструмент подберёт окружение под тип каждой (город / трасса / бездорожье / побережье) и нарисует кинематографичный фон под hero в фирменном стиле. Превью + скачивание.</p>
+
+  <!-- KEY -->
+  <div class="keybar">
+    <span class="lbl">OpenAI key</span>
+    <input id="key" type="password" placeholder="sk-proj-... (хранится только в этом браузере)" autocomplete="off">
+    <button class="btn ghost sm" id="saveKey">Сохранить</button>
+    <button class="btn ghost sm" id="forgetKey">Забыть</button>
+    <span class="keystatus" id="keyStatus">ключ не сохранён</span>
+    <span class="disc">🔒 Ключ хранится в localStorage этого браузера и уходит только напрямую в api.openai.com. В репозиторий/на сервер не попадает. На чужом компьютере жми «Забыть».</span>
+  </div>
+
+  <div class="grid">
+    <!-- CONTROLS -->
+    <div class="card">
+      <div class="field">
+        <label class="lbl" for="cars">Список машин</label>
+        <textarea id="cars" placeholder="По одной машине на строку:&#10;Land Rover Range Rover Velar 2018&#10;BMW M5 Competition 2021&#10;Jeep Wrangler Rubicon 2022">Land Rover Range Rover Velar 2018</textarea>
+        <div class="hint">строка = машина · перетащи сюда .txt/.csv или <a href="#" id="pickFile" style="color:var(--acc)">выбери файл</a></div>
+        <input type="file" id="fileInput" accept=".txt,.csv,text/plain,text/csv" style="display:none">
+      </div>
+      <button class="btn" id="go">Сгенерировать</button>
+      <div class="cost" id="cost"></div>
+    </div>
+
+    <!-- OUTPUT -->
+    <div class="card out">
+      <div class="toolbar" id="toolbar" style="display:none">
+        <button class="btn ghost sm" id="dlAll">Скачать все</button>
+      </div>
+      <div class="log" id="log"></div>
+      <div class="results" id="results" style="display:none"></div>
+      <div class="placeholder" id="placeholder">
+        <svg width="44" height="44" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="3" y="5" width="18" height="14" rx="2"/><circle cx="8.5" cy="10" r="1.5"/><path d="M21 16l-5-5L5 19"/></svg>
+        <div class="mono" style="font-size:12px">здесь появятся фоны</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+const $ = s => document.querySelector(s);
+const KEY_LS = 'monte_openai_key';
+const PRICE_HIGH = 0.21;   // ориентир за 1536x1024 high, gpt-image-2
+const GEN = [];            // {b64, car} для «скачать все»
+
+// ---- стиль фото, выученный из референсов Monte (постоянная часть промпта) ----
+const STYLE = (car, env) =>
+  `Cinematic automotive advertising photograph of a ${car} — the real production car with accurate body shape, grille, headlights and proportions. `+
+  `The car is ${env}. `+
+  `Moody premium colour grading, dramatic cinematic lighting, subtle motion blur conveying speed, dynamic three-quarter front view. `+
+  `Composition: the car sits in the RIGHT two-thirds of the frame; the LEFT third is darker with clean negative space reserved for a text overlay. `+
+  `Shot on a full-frame DSLR, 35mm lens, shallow depth of field, ultra realistic, razor-sharp detail, professional car commercial look. `+
+  `No text, no captions, no watermark, no UI, no overlay graphics.`;
+
+// ---- key ----
+function loadKey(){ const k=localStorage.getItem(KEY_LS); if(k){ $('#key').value=k; setKeyStatus(true);} }
+function setKeyStatus(on){ const el=$('#keyStatus'); el.textContent=on?'✓ ключ сохранён':'ключ не сохранён'; el.classList.toggle('on',on); }
+$('#saveKey').onclick=()=>{ const k=$('#key').value.trim(); if(!k){setKeyStatus(false);return;} localStorage.setItem(KEY_LS,k); setKeyStatus(true); };
+$('#forgetKey').onclick=()=>{ localStorage.removeItem(KEY_LS); $('#key').value=''; setKeyStatus(false); };
+
+// ---- список машин ----
+function carList(){ return $('#cars').value.split('\n').map(s=>s.trim()).filter(Boolean); }
+
+// ---- cost ----
+function updateCost(){
+  const n=carList().length;
+  const total=(PRICE_HIGH+0.0004)*n;
+  $('#cost').innerHTML = n ? `≈ <b>$${total.toFixed(2)}</b> за ${n} ${plural(n)} (high)` : 'добавь хотя бы одну машину';
+}
+function plural(n){ const a=Math.abs(n)%100,b=a%10; if(a>10&&a<20)return'машин'; if(b>1&&b<5)return'машины'; if(b===1)return'машину'; return'машин'; }
+$('#cars').addEventListener('input',updateCost);
+
+// ---- загрузка списка: файл / drag&drop ----
+const carsEl=$('#cars');
+function parseList(text){
+  let parts=text.split(/[\n;]+/).map(s=>s.trim()).filter(Boolean);
+  if(parts.length<=1 && text.includes(',')) parts=text.split(',').map(s=>s.trim()).filter(Boolean);
+  return parts;
+}
+function loadText(text){ const p=parseList(text); if(p.length){ carsEl.value=p.join('\n'); updateCost(); } }
+function readFile(f){ if(!f) return; const r=new FileReader(); r.onload=()=>loadText(r.result); r.readAsText(f); }
+carsEl.addEventListener('dragover',e=>{e.preventDefault(); carsEl.classList.add('drag');});
+carsEl.addEventListener('dragleave',()=>carsEl.classList.remove('drag'));
+carsEl.addEventListener('drop',e=>{e.preventDefault(); carsEl.classList.remove('drag'); readFile(e.dataTransfer.files[0]);});
+$('#pickFile').onclick=e=>{e.preventDefault(); $('#fileInput').click();};
+$('#fileInput').onchange=e=>readFile(e.target.files[0]);
+
+// ---- таймер генерации ----
+function startTimer(el){ const t0=Date.now(); el.textContent='0s'; const id=setInterval(()=>{el.textContent=Math.round((Date.now()-t0)/1000)+'s';},1000); return ()=>clearInterval(id); }
+
+// ---- API ----
+async function callOpenAI(path, body, key){
+  const r=await fetch('https://api.openai.com/v1/'+path,{
+    method:'POST', headers:{'Authorization':'Bearer '+key,'Content-Type':'application/json'}, body:JSON.stringify(body)
+  });
+  const data=await r.json();
+  if(!r.ok) throw new Error(data?.error?.message||('HTTP '+r.status));
+  return data;
+}
+async function brain(car, key){
+  const sys=`You create cinematic hero background photos for a car-tuning website. For the given car respond ONLY with strict JSON: `+
+    `{"type":"body style in 1-3 words","environment":"one vivid English scene phrase describing the natural habitat / location where this kind of car is shown in premium ads, usable directly as a photo scene (e.g. neon downtown at night for a sports sedan, muddy rocky mountain trail for an off-roader, coastal highway at golden hour for a GT)"}`;
+  const data=await callOpenAI('chat/completions',{
+    model:'gpt-4o-mini', response_format:{type:'json_object'}, temperature:0.7,
+    messages:[{role:'system',content:sys},{role:'user',content:car}]
+  },key);
+  return JSON.parse(data.choices[0].message.content);
+}
+async function draw(prompt, size, key){
+  const data=await callOpenAI('images/generations',{ model:'gpt-image-2', prompt, size, quality:'high', n:1 },key);
+  return data.data[0].b64_json;
+}
+
+// ---- render ----
+function escapeHtml(s){return (s||'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));}
+function slug(s){return (s.toLowerCase().replace(/[^a-z0-9]+/g,'-').replace(/^-|-$/g,'')||'car').slice(0,50);}
+function downloadB64(b64,name){ const a=document.createElement('a'); a.href='data:image/png;base64,'+b64; a.download=name+'.png'; a.click(); }
+const sleep=ms=>new Promise(r=>setTimeout(r,ms));
+
+function loadingCard(car){
+  const w=document.createElement('div'); w.className='shot';
+  w.innerHTML=`<div class="shotimg shotload"><div class="spin"></div><div class="mono" style="font-size:11px">${escapeHtml(car)}</div><div class="timer mono">0s</div></div>`;
+  return w;
+}
+function fillCard(w, b64, scene, car){
+  const url='data:image/png;base64,'+b64;
+  w.innerHTML=`
+    <div class="shotimg"><img src="${url}" alt=""></div>
+    <div class="shotmeta">
+      <div style="min-width:0"><div class="name">${escapeHtml(car)}</div><div class="scene">${escapeHtml(scene)}</div></div>
+      <button class="btn ghost sm dl">Скачать</button>
+    </div>`;
+  w.querySelector('.dl').onclick=()=>downloadB64(b64,slug(car));
+}
+function errCard(w, car, msg){
+  w.classList.add('err');
+  w.innerHTML=`<div class="shotimg shotload"><div class="mono" style="font-size:22px">⚠️</div><div class="mono" style="font-size:11px">${escapeHtml(car)}</div></div>
+    <div class="shotmeta"><div class="errtxt">${escapeHtml(msg)}</div></div>`;
+}
+
+// ---- «скачать все» ----
+$('#dlAll').onclick=async()=>{
+  for(const g of GEN){ downloadB64(g.b64, slug(g.car)); await sleep(350); }
+};
+
+// ---- main (батч) ----
+$('#go').onclick=async()=>{
+  const key=($('#key').value.trim()||localStorage.getItem(KEY_LS)||'').trim();
+  const cars=carList();
+  const log=$('#log'), results=$('#results'), go=$('#go');
+  if(!key){ log.innerHTML='<span class="e">✗ Вставь OpenAI-ключ.</span>'; return; }
+  if(!cars.length){ log.innerHTML='<span class="e">✗ Добавь хотя бы одну машину.</span>'; return; }
+  if($('#key').value.trim()){ localStorage.setItem(KEY_LS,key); setKeyStatus(true); }
+
+  const size='1536x1024';
+
+  go.disabled=true; GEN.length=0;
+  $('#placeholder').style.display='none';
+  results.style.display='grid'; results.innerHTML='';
+  $('#toolbar').style.display='flex'; $('#dlAll').disabled=true;
+
+  let done=0, fail=0;
+  for(let i=0;i<cars.length;i++){
+    const car=cars[i];
+    log.innerHTML=`<span class="spin"></span> <span class="step">${i+1} из ${cars.length}:</span> ${escapeHtml(car)}…`;
+    const wcard=loadingCard(car); results.appendChild(wcard);
+    const stop=startTimer(wcard.querySelector('.timer'));
+    try{
+      const b=await brain(car,key);
+      const scene=b.environment;
+      const b64=await draw(STYLE(car,scene), size, key);
+      fillCard(wcard, b64, scene, car);
+      GEN.push({b64,car}); done++;
+    }catch(err){
+      errCard(wcard, car, err.message); fail++;
+    }finally{ stop(); }
+  }
+  $('#dlAll').disabled=GEN.length===0;
+  log.innerHTML=`<span class="step">✓ готово:</span> ${done} из ${cars.length}${fail?` · <span class="e">ошибок: ${fail}</span>`:''}`;
+  go.disabled=false;
+};
+
+loadKey(); updateCost();
+</script>
+</body>
+</html>
