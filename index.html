@@ -83,6 +83,13 @@
   .toolbar .check{margin-left:auto}
   .check{display:flex;align-items:center;gap:9px;cursor:pointer;user-select:none}
   .check input{width:16px;height:16px;accent-color:var(--acc);flex:0 0 auto}
+  .ratios{display:flex;flex-direction:column;gap:8px}
+  .rcheck{display:flex;align-items:center;gap:10px;cursor:pointer;user-select:none;background:#000;border:1px solid var(--line);border-radius:9px;padding:10px 12px;transition:border-color .15s}
+  .rcheck:hover{border-color:var(--mut2)}
+  .rcheck input{width:16px;height:16px;accent-color:var(--acc);flex:0 0 auto;margin:0}
+  .rcheck span{font-family:var(--mono);font-size:12px;display:flex;align-items:baseline;gap:7px;flex:1}
+  .rcheck span b{font-weight:600;color:var(--txt)}
+  .rcheck span i{font-style:normal;color:var(--mut2);font-size:10.5px;margin-left:auto;padding-left:8px}
   .spin{width:15px;height:15px;border:2px solid rgba(255,255,255,.25);border-top-color:#fff;border-radius:50%;animation:sp .7s linear infinite}
   @keyframes sp{to{transform:rotate(360deg)}}
 
@@ -112,16 +119,18 @@
     <div class="card">
       <div class="field">
         <label class="lbl" for="cars">Список машин</label>
-        <textarea id="cars" placeholder="По одной машине на строку:&#10;Land Rover Range Rover Velar 2018&#10;BMW M5 Competition 2021&#10;Jeep Wrangler Rubicon 2022">Land Rover Range Rover Velar 2018</textarea>
-        <div class="hint">строка = машина · перетащи сюда .txt/.csv или <a href="#" id="pickFile" style="color:var(--acc)">выбери файл</a></div>
+        <textarea id="cars" placeholder="По одной машине на строку. Фон — по желанию в [ ] :&#10;Land Rover Range Rover Velar 2018&#10;BMW M5 Competition 2021 [ночной город, неон, мокрый асфальт]&#10;Jeep Wrangler Rubicon 2022 [горный серпантин на закате]">Land Rover Range Rover Velar 2018</textarea>
+        <div class="hint">строка = машина · фон по желанию в <b style="color:var(--acc)">[ ]</b> (без него подберём авто) · перетащи .txt/.csv или <a href="#" id="pickFile" style="color:var(--acc)">выбери файл</a></div>
         <input type="file" id="fileInput" accept=".txt,.csv,text/plain,text/csv" style="display:none">
       </div>
       <div class="field">
-        <label class="lbl" for="ratio">Соотношение</label>
-        <select id="ratio">
-          <option value="16:9" selected>16:9 — 1792×1008 (hero)</option>
-          <option value="21:9">21:9 — 1792×768 (ультраширокий)</option>
-        </select>
+        <label class="lbl">Соотношения <span style="color:var(--mut2);text-transform:none;letter-spacing:0;font-size:10px">— можно несколько</span></label>
+        <div class="ratios" id="ratios">
+          <label class="rcheck"><input type="checkbox" value="16:9" checked><span><b>16:9</b> 1792×1008<i>десктоп hero</i></span></label>
+          <label class="rcheck"><input type="checkbox" value="21:9"><span><b>21:9</b> 1792×768<i>ультраширокий</i></span></label>
+          <label class="rcheck"><input type="checkbox" value="4:5" checked><span><b>4:5</b> 1024×1280<i>мобильный</i></span></label>
+          <label class="rcheck"><input type="checkbox" value="9:16"><span><b>9:16</b> 1008×1792<i>мобильный фулл</i></span></label>
+        </div>
       </div>
       <button class="btn" id="go">Сгенерировать</button>
       <div class="cost" id="cost"></div>
@@ -145,17 +154,24 @@
 <script>
 const $ = s => document.querySelector(s);
 const KEY_LS = 'monte_openai_key';
-const PRICE_HIGH = 0.23;   // ориентир high, gpt-image-2 (16:9)
-const SIZES = {'16:9':'1792x1008','21:9':'1792x768'};
-const RATIOS = {'16:9':'16/9','21:9':'21/9'};
-const GEN = [];            // {b64, car} для «скачать все»
+const PRICE_HIGH = 0.23;   // ориентир high, gpt-image-2
+// gpt-image-2 рисует любой размер кратный 16 — пресеты под десктоп- и мобильный hero
+const SIZES  = {'16:9':'1792x1008','21:9':'1792x768','4:5':'1024x1280','9:16':'1008x1792'};
+const RATIOS = {'16:9':'16/9','21:9':'21/9','4:5':'4/5','9:16':'9/16'};
+const ORIENT = {'16:9':'land','21:9':'land','4:5':'port','9:16':'port'};
+const GEN = [];            // {b64, car, ratio} для «скачать все»
 
+// ---- композиция под ориентацию: горизонт = место под текст слева, вертикаль = сверху ----
+const COMPOSE = {
+  land:`Composition: dynamic three-quarter front view; the car sits in the RIGHT two-thirds of the frame, the LEFT third is darker with clean negative space reserved for a text overlay.`,
+  port:`Vertical composition: three-quarter front view; the car sits in the LOWER two-thirds of the frame, roughly centred, the TOP is darker with clean negative space reserved for a headline.`
+};
 // ---- стиль фото, выученный из референсов Monte (постоянная часть промпта) ----
-const STYLE = (car, env) =>
+const STYLE = (car, env, orient) =>
   `Cinematic automotive advertising photograph of a ${car} — the real production car with accurate body shape, grille, headlights and proportions. `+
-  `The car is ${env}. `+
-  `Moody premium colour grading, dramatic cinematic lighting, subtle motion blur conveying speed, dynamic three-quarter front view. `+
-  `Composition: the car sits in the RIGHT two-thirds of the frame; the LEFT third is darker with clean negative space reserved for a text overlay. `+
+  `Setting / environment: ${env}. `+
+  `Moody premium colour grading, dramatic cinematic lighting, subtle motion blur conveying speed. `+
+  COMPOSE[orient]+' '+
   `Shot on a full-frame DSLR, 35mm lens, shallow depth of field, ultra realistic, razor-sharp detail, professional car commercial look. `+
   `No text, no captions, no watermark, no UI, no overlay graphics.`;
 
@@ -165,17 +181,27 @@ function setKeyStatus(on){ const el=$('#keyStatus'); el.textContent=on?'✓ кл
 $('#saveKey').onclick=()=>{ const k=$('#key').value.trim(); if(!k){setKeyStatus(false);return;} localStorage.setItem(KEY_LS,k); setKeyStatus(true); };
 $('#forgetKey').onclick=()=>{ localStorage.removeItem(KEY_LS); $('#key').value=''; setKeyStatus(false); };
 
-// ---- список машин ----
-function carList(){ return $('#cars').value.split('\n').map(s=>s.trim()).filter(Boolean); }
+// ---- список машин: строка = "Машина" или "Машина [описание фона]" ----
+function carList(){
+  return $('#cars').value.split('\n').map(s=>s.trim()).filter(Boolean).map(line=>{
+    const m=line.match(/^(.*?)\[(.*)\]\s*$/);
+    return m ? {car:m[1].trim(), bg:m[2].trim()} : {car:line, bg:''};
+  }).filter(x=>x.car);
+}
+function selectedRatios(){ return [...document.querySelectorAll('#ratios input:checked')].map(c=>c.value); }
 
-// ---- cost ----
+// ---- cost: машины × форматы ----
 function updateCost(){
-  const n=carList().length;
-  const total=(PRICE_HIGH+0.0004)*n;
-  $('#cost').innerHTML = n ? `≈ <b>$${total.toFixed(2)}</b> за ${n} ${plural(n)} (high)` : 'добавь хотя бы одну машину';
+  const n=carList().length, m=selectedRatios().length, imgs=n*m;
+  const total=PRICE_HIGH*imgs + 0.0004*n;
+  $('#cost').innerHTML = (n&&m)
+    ? `≈ <b>$${total.toFixed(2)}</b> · ${n} ${plural(n)} × ${m} ${fmtPlural(m)} = ${imgs} карт. (high)`
+    : (!n ? 'добавь хотя бы одну машину' : 'выбери хотя бы одно соотношение');
 }
 function plural(n){ const a=Math.abs(n)%100,b=a%10; if(a>10&&a<20)return'машин'; if(b>1&&b<5)return'машины'; if(b===1)return'машину'; return'машин'; }
+function fmtPlural(m){ return m===1?'формат':(m>=2&&m<=4?'формата':'форматов'); }
 $('#cars').addEventListener('input',updateCost);
+document.querySelectorAll('#ratios input').forEach(c=>c.addEventListener('change',updateCost));
 
 // ---- загрузка списка: файл / drag&drop ----
 const carsEl=$('#cars');
@@ -229,15 +255,15 @@ function loadingCard(car, cssRatio){
   w.innerHTML=`<div class="shotimg shotload" style="aspect-ratio:${cssRatio}"><div class="spin"></div><div class="mono" style="font-size:11px">${escapeHtml(car)}</div><div class="timer mono">0s</div></div>`;
   return w;
 }
-function fillCard(w, b64, scene, car, cssRatio){
+function fillCard(w, b64, scene, car, ratio, cssRatio){
   const url='data:image/png;base64,'+b64;
   w.innerHTML=`
     <div class="shotimg" style="aspect-ratio:${cssRatio}"><img src="${url}" alt=""></div>
     <div class="shotmeta">
-      <div style="min-width:0"><div class="name">${escapeHtml(car)}</div><div class="scene">${escapeHtml(scene)}</div></div>
+      <div style="min-width:0"><div class="name">${escapeHtml(car)}</div><div class="scene">${escapeHtml(ratio)} · ${escapeHtml(scene)}</div></div>
       <button class="btn ghost sm dl">Скачать</button>
     </div>`;
-  w.querySelector('.dl').onclick=()=>downloadB64(b64,slug(car));
+  w.querySelector('.dl').onclick=()=>downloadB64(b64,slug(car)+'-'+ratio.replace(':','x'));
 }
 function errCard(w, car, msg){
   w.classList.add('err');
@@ -247,7 +273,7 @@ function errCard(w, car, msg){
 
 // ---- «скачать все» ----
 $('#dlAll').onclick=async()=>{
-  for(const g of GEN){ downloadB64(g.b64, slug(g.car)); await sleep(350); }
+  for(const g of GEN){ downloadB64(g.b64, slug(g.car)+'-'+g.ratio.replace(':','x')); await sleep(350); }
 };
 
 // ---- main (батч) ----
@@ -259,31 +285,38 @@ $('#go').onclick=async()=>{
   if(!cars.length){ log.innerHTML='<span class="e">✗ Добавь хотя бы одну машину.</span>'; return; }
   if($('#key').value.trim()){ localStorage.setItem(KEY_LS,key); setKeyStatus(true); }
 
-  const ratio=$('#ratio').value, size=SIZES[ratio], cssRatio=RATIOS[ratio];
-
   go.disabled=true; GEN.length=0;
   $('#placeholder').style.display='none';
   results.style.display='grid'; results.innerHTML='';
   $('#toolbar').style.display='flex'; $('#dlAll').disabled=true;
 
-  let done=0, fail=0;
-  for(let i=0;i<cars.length;i++){
-    const car=cars[i];
-    log.innerHTML=`<span class="spin"></span> <span class="step">${i+1} из ${cars.length}:</span> ${escapeHtml(car)}…`;
-    const wcard=loadingCard(car, cssRatio); results.appendChild(wcard);
-    const stop=startTimer(wcard.querySelector('.timer'));
-    try{
-      const b=await brain(car,key);
-      const scene=b.environment;
-      const b64=await draw(STYLE(car,scene), size, key);
-      fillCard(wcard, b64, scene, car, cssRatio);
-      GEN.push({b64,car}); done++;
-    }catch(err){
-      errCard(wcard, car, err.message); fail++;
-    }finally{ stop(); }
+  const total=cars.length*ratios.length;
+  let done=0, fail=0, idx=0;
+  for(const {car,bg} of cars){
+    // окружение: ручной фон (если задан через |) либо авто через gpt-4o-mini — один раз на машину
+    let scene=bg, brainErr=null;
+    if(!scene){
+      try{ scene=(await brain(car,key)).environment; }
+      catch(err){ brainErr=err; }
+    }
+    for(const ratio of ratios){
+      idx++;
+      const size=SIZES[ratio], cssRatio=RATIOS[ratio], orient=ORIENT[ratio], label=car+' · '+ratio;
+      log.innerHTML=`<span class="spin"></span> <span class="step">${idx} из ${total}:</span> ${escapeHtml(label)}…`;
+      const wcard=loadingCard(label, cssRatio); results.appendChild(wcard);
+      const stop=startTimer(wcard.querySelector('.timer'));
+      try{
+        if(brainErr) throw brainErr;
+        const b64=await draw(STYLE(car,scene,orient), size, key);
+        fillCard(wcard, b64, scene, car, ratio, cssRatio);
+        GEN.push({b64,car,ratio}); done++;
+      }catch(err){
+        errCard(wcard, label, err.message); fail++;
+      }finally{ stop(); }
+    }
   }
   $('#dlAll').disabled=GEN.length===0;
-  log.innerHTML=`<span class="step">✓ готово:</span> ${done} из ${cars.length}${fail?` · <span class="e">ошибок: ${fail}</span>`:''}`;
+  log.innerHTML=`<span class="step">✓ готово:</span> ${done} из ${total}${fail?` · <span class="e">ошибок: ${fail}</span>`:''}`;
   go.disabled=false;
 };
 
