@@ -151,6 +151,8 @@
   </div>
 </div>
 
+<!-- JSZip — «скачать все» одним архивом (есть fallback на поштучное скачивание) -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
 <script>
 const $ = s => document.querySelector(s);
 const KEY_LS = 'monte_openai_key';
@@ -247,7 +249,9 @@ async function draw(prompt, size, key){
 // ---- render ----
 function escapeHtml(s){return (s||'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));}
 function slug(s){return (s.toLowerCase().replace(/[^a-z0-9]+/g,'-').replace(/^-|-$/g,'')||'car').slice(0,50);}
-function downloadB64(b64,name){ const a=document.createElement('a'); a.href='data:image/png;base64,'+b64; a.download=name+'.png'; a.click(); }
+function b64ToBytes(b64){ const bin=atob(b64); const arr=new Uint8Array(bin.length); for(let i=0;i<bin.length;i++) arr[i]=bin.charCodeAt(i); return arr; }
+function downloadBlob(blob,filename){ const url=URL.createObjectURL(blob); const a=document.createElement('a'); a.href=url; a.download=filename; document.body.appendChild(a); a.click(); a.remove(); setTimeout(()=>URL.revokeObjectURL(url),1500); }
+function downloadB64(b64,name){ downloadBlob(new Blob([b64ToBytes(b64)],{type:'image/png'}), name+'.png'); }
 const sleep=ms=>new Promise(r=>setTimeout(r,ms));
 
 function loadingCard(car, cssRatio){
@@ -271,18 +275,33 @@ function errCard(w, car, msg){
     <div class="shotmeta"><div class="errtxt">${escapeHtml(msg)}</div></div>`;
 }
 
-// ---- «скачать все» ----
+// ---- «скачать все»: один ZIP (fallback — поштучно, если JSZip не загрузился) ----
+function genName(g,used){ let base=slug(g.car)+'-'+g.ratio.replace(':','x'),name=base,i=2; while(used[name])name=base+'-'+(i++); used[name]=1; return name; }
 $('#dlAll').onclick=async()=>{
-  for(const g of GEN){ downloadB64(g.b64, slug(g.car)+'-'+g.ratio.replace(':','x')); await sleep(350); }
+  if(!GEN.length) return;
+  const btn=$('#dlAll'), label=btn.textContent;
+  if(window.JSZip){
+    btn.disabled=true; btn.textContent='Архивирую…';
+    try{
+      const zip=new JSZip(), used={};
+      for(const g of GEN) zip.file(genName(g,used)+'.png', b64ToBytes(g.b64));
+      downloadBlob(await zip.generateAsync({type:'blob'}), 'monte-backgrounds.zip');
+    } finally { btn.textContent=label; btn.disabled=false; }
+  } else {
+    const used={};
+    for(const g of GEN){ downloadB64(g.b64, genName(g,used)); await sleep(400); }
+  }
 };
 
 // ---- main (батч) ----
 $('#go').onclick=async()=>{
   const key=($('#key').value.trim()||localStorage.getItem(KEY_LS)||'').trim();
   const cars=carList();
+  const ratios=selectedRatios();
   const log=$('#log'), results=$('#results'), go=$('#go');
   if(!key){ log.innerHTML='<span class="e">✗ Вставь OpenAI-ключ.</span>'; return; }
   if(!cars.length){ log.innerHTML='<span class="e">✗ Добавь хотя бы одну машину.</span>'; return; }
+  if(!ratios.length){ log.innerHTML='<span class="e">✗ Выбери хотя бы одно соотношение.</span>'; return; }
   if($('#key').value.trim()){ localStorage.setItem(KEY_LS,key); setKeyStatus(true); }
 
   go.disabled=true; GEN.length=0;
